@@ -63,7 +63,7 @@
         let carrito = [];
         let filtroCat = 'Todos';
         let busquedaVenta = '';
-        let temporalCliente = { nombre: '', tel: '' }; // Para evitar que se borre al buscar
+        let temporalCliente = { nombre: '', tel: '' }; 
 
         const sync = async () => {
             const pSnap = await getDocs(collection(db_cloud, "productos"));
@@ -141,7 +141,6 @@
 
         window.delP = async (n) => { if(confirm("¿Eliminar?")) { await deleteDoc(doc(db_cloud, "productos", n)); await sync(); window.renderInventario(); }};
 
-        // --- VENTAS (CON PERSISTENCIA DE DATOS CLIENTE) ---
         window.renderVenta = () => {
             document.getElementById('app-content').innerHTML = `
                 <div class="bg-white p-4 rounded-2xl shadow mb-4">
@@ -218,7 +217,7 @@
                 await addDoc(collection(db_cloud, "deudas"), { 
                     cli: cli, tel: tel, monto: tot, fecha: new Date().toLocaleDateString(), 
                     detalle: carrito.map(x=>`${x.c}x ${x.d}`).join(', '),
-                    items: carrito // Guardamos los items para poder re-imprimir
+                    items: carrito 
                 });
             }
 
@@ -246,7 +245,6 @@
             window.print();
         };
 
-        // --- FIADOS (CON TICKET Y WHATSAPP) ---
         window.renderDeudas = () => {
             document.getElementById('app-content').innerHTML = `
                 <h2 class="font-black text-blue-900 uppercase mb-4">Cuentas por Cobrar</h2>
@@ -276,7 +274,6 @@
 
         window.cobrar = async (id) => { if(confirm("¿Confirmar pago de esta deuda?")) { await deleteDoc(doc(db_cloud, "deudas", id)); await sync(); window.renderDeudas(); }};
 
-        // --- ADMIN ---
         window.renderAdmin = () => {
             document.getElementById('app-content').innerHTML = `
                 <div class="space-y-4">
@@ -296,12 +293,13 @@
                 </div>`;
         };
 
+        // --- CORRECCIÓN DE SUBIDA (UTF-8) ---
         window.subirCSV = () => {
             const input = document.getElementById('fCsv'); if(!input.files[0]) return alert("Selecciona archivo");
             const reader = new FileReader();
             reader.onload = async (e) => {
                 const lines = e.target.result.split('\n');
-                alert("Procesando...");
+                alert("Procesando datos...");
                 for(let i=1; i<lines.length; i++) {
                     const d = lines[i].split(',');
                     if(d.length >= 3) {
@@ -313,7 +311,8 @@
                 }
                 alert("Nube Actualizada"); await sync();
             };
-            reader.readAsText(input.files[0]);
+            // Forzar lectura en UTF-8 para reconocer eñes y acentos
+            reader.readAsText(input.files[0], 'UTF-8');
         };
 
         window.borrarTodo = async () => {
@@ -328,12 +327,24 @@
             alert("Sistema Limpio"); await sync(); window.renderDashboard();
         };
 
+        // --- CORRECCIÓN DE EXPORTACIÓN (UTF-8 con BOM) ---
         window.exp = (t) => {
-            let c = (t === 'v') ? "Fecha,Cliente,Monto,Utilidad\n" : "Nombre,Costo,Precio,Stock,Categoria\n";
-            if (t === 'v') db.transacciones.forEach(x => c += `${x.fecha},${x.cli},${x.monto},${x.utilidad}\n`);
-            else db.productos.forEach(x => c += `${x.nombre},${x.costo},${x.precio},${x.stock},${x.cat}\n`);
-            const b = new Blob([c], { type: 'text/csv' }), l = document.createElement('a');
-            l.href = URL.createObjectURL(b); l.download = (t==='v'?"ventas.csv":"stock.csv"); l.click();
+            let contenido = (t === 'v') ? "Fecha,Cliente,Monto,Utilidad\n" : "Nombre,Costo,Precio,Stock,Categoria\n";
+            if (t === 'v') {
+                db.transacciones.forEach(x => {
+                    contenido += `${x.fecha},${x.cli},${x.monto},${x.utilidad}\n`;
+                });
+            } else {
+                db.productos.forEach(x => {
+                    contenido += `${x.nombre},${x.costo},${x.precio},${x.stock},${x.cat}\n`;
+                });
+            }
+            // Agregar el BOM (\ufeff) para que Excel reconozca los caracteres especiales
+            const blob = new Blob(["\ufeff" + contenido], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob); 
+            link.download = (t === 'v' ? "ventas_vcocharcas.csv" : "stock_vcocharcas.csv"); 
+            link.click();
         };
 
         await sync(); window.renderDashboard();
