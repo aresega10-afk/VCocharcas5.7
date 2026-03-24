@@ -141,7 +141,7 @@
 
         window.delP = async (n) => { if(confirm("¿Eliminar?")) { await deleteDoc(doc(db_cloud, "productos", n)); await sync(); window.renderInventario(); }};
 
-        // --- CORRECCIÓN BUSCADOR (MANTIENE EL FOCO) ---
+        // --- VENTAS CORREGIDAS (PERSISTENCIA Y FOCO) ---
         window.renderVenta = () => {
             document.getElementById('app-content').innerHTML = `
                 <div class="bg-white p-4 rounded-2xl shadow mb-4">
@@ -165,6 +165,7 @@
                 </div>
                 <div id="cart-area" class="bg-blue-900 text-white p-5 rounded-3xl shadow-2xl"></div>`;
             rCart();
+            // Mantener foco y valor en el buscador
             document.getElementById('bus-prod').value = busquedaVenta;
             document.getElementById('bus-prod').focus();
         };
@@ -275,13 +276,19 @@
                 </div>`;
         };
 
-        // --- CORRECCIÓN CSV: COMPATIBLE CON EXCEL EN ESPAÑOL ---
+        // --- IMPORTACIÓN CSV CON DETECCIÓN BINARIA ---
         window.subirCSV = () => {
             const input = document.getElementById('fCsv'); if(!input.files[0]) return alert("Selecciona archivo");
             const reader = new FileReader();
             reader.onload = async (e) => {
-                const lines = e.target.result.split('\n');
-                alert("Sincronizando con eñes y acentos...");
+                const bytes = new Uint8Array(e.target.result);
+                // Intento UTF-8, si falla (caracter roto ), usa Windows-1252 (Excel Español)
+                let contenido = new TextDecoder('utf-8').decode(bytes);
+                if (contenido.includes('')) {
+                    contenido = new TextDecoder('windows-1252').decode(bytes);
+                }
+                const lines = contenido.split('\n');
+                alert("Sincronizando productos con eñes y acentos...");
                 for(let i=1; i<lines.length; i++) {
                     const d = lines[i].split(',');
                     if(d.length >= 3) {
@@ -289,17 +296,16 @@
                         await setDoc(doc(db_cloud, "productos", n), { nombre: n, costo: parseFloat(d[1])||0, precio: parseFloat(d[2])||0, stock: parseInt(d[3])||0, cat: (d[4]||"General").trim() });
                     }
                 }
-                alert("Nube Actualizada"); await sync();
+                alert("Nube Actualizada"); await sync(); renderInventario();
             };
-            // 'ISO-8859-1' lee correctamente los acentos que Excel guarda por defecto
-            reader.readAsText(input.files[0], 'ISO-8859-1');
+            reader.readAsArrayBuffer(input.files[0]);
         };
 
         window.exp = (t) => {
             let contenido = (t === 'v') ? "Fecha,Cliente,Monto,Utilidad\n" : "Nombre,Costo,Precio,Stock,Categoria\n";
             if (t === 'v') db.transacciones.forEach(x => contenido += `${x.fecha},${x.cli},${x.monto},${x.utilidad}\n`);
             else db.productos.forEach(x => contenido += `${x.nombre},${x.costo},${x.precio},${x.stock},${x.cat}\n`);
-            // \ufeff permite que Excel reconozca los caracteres especiales al abrirlo
+            // \ufeff permite que Excel reconozca caracteres especiales al abrir
             const blob = new Blob(["\ufeff" + contenido], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
